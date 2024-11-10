@@ -5,8 +5,7 @@ import smtplib
 from email.mime.text import MIMEText
 from user_agents import parse
 import time
-import socket
-from ip2geotools.databases.noncommercial import DbIpCity
+import requests
 
 app = Flask(__name__)
 
@@ -16,22 +15,18 @@ otp_storage = {}
 TIMEOUT = 5 * 60  # 5 minutes timeout for OTP
 HIGH_RISK_TIMEOUT = 2 * 60  # 2 minutes for high-risk devices
 
-# Function to get IP address of the server
-def get_ip_address():
-    ip_address = socket.gethostbyname(hostname)  # Convert to IP address
-    return ip_address
-
-# Function to fetch location from IP address using ip2geotools
+# Function to fetch location from IP address
 def get_location_from_ip(ip_address):
     try:
-        # Use DbIpCity to fetch the geolocation from IP
-        res = DbIpCity.get(ip_address, api_key="free")
-        location = f"{res.city}, {res.region}, {res.country}"
-        coordinates = (res.latitude, res.longitude)
-        return location, coordinates
+        # Call IP Geolocation API
+        response = requests.get(f"https://ipapi.co/{ip_address}/json/")
+        data = response.json()
+        # Retrieve location details
+        location = f"{data.get('city')}, {data.get('region')}, {data.get('country_name')}"
+        return location
     except Exception as e:
         print(f"Error fetching location: {e}")
-        return "Location Unavailable", None
+        return "Location Unavailable"
 
 # Function to generate and send OTP via Gmail
 def send_otp(email, otp):
@@ -59,7 +54,7 @@ def generate_fingerprint(request):
 
 # Function to send login attempt notification
 def send_login_attempt_notification(username, email, ip_address):
-    location, coordinates = get_location_from_ip(ip_address)  # Fetch location from IP
+    location = get_location_from_ip(ip_address)  # Fetch location from IP
     device_id = generate_fingerprint(request)
     
     message_content = f"""
@@ -70,7 +65,6 @@ def send_login_attempt_notification(username, email, ip_address):
     Device ID: {device_id}
     Origin (IP): {ip_address}
     Location: {location}
-    Coordinates: Lat: {coordinates[0]}, Lng: {coordinates[1]} if coordinates else 'N/A'
     """
 
     # Set up email content
@@ -100,7 +94,7 @@ def home():
 def login():
     username = request.form['username']
     email = request.form['email']
-    ip_address = get_ip_address()  # Use the local server's IP address
+    ip_address = request.remote_addr
     fingerprint = generate_fingerprint(request)
 
     # Trigger OTP for unrecognized devices and send login notification
