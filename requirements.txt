@@ -3,4 +3,4 @@ pyotp==2.6.0
 requests==2.28.1
 user-agents==2.2.0
 gunicorn
-ip2geotools==0.1.0
+ip2geotools
