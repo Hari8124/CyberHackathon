@@ -52,9 +52,23 @@ def generate_fingerprint(request):
     fingerprint = hashlib.sha256(f"{request.remote_addr}{ua.device}{ua.os}".encode()).hexdigest()
     return fingerprint
 
+# Function to fetch the real client IP address, considering proxy headers
+def get_client_ip(request):
+    """Fetches the real client IP address."""
+    # If the request is behind a proxy (like Render), use the X-Forwarded-For header
+    ip_address = request.headers.get('X-Forwarded-For')
+    if ip_address:
+        # X-Forwarded-For can contain a comma-separated list of IPs, we need the first one
+        ip_address = ip_address.split(',')[0]
+    else:
+        # Fallback to request.remote_addr for direct requests
+        ip_address = request.remote_addr
+    return ip_address
+
 # Function to send login attempt notification
-def send_login_attempt_notification(username, email, ip_address):
-    location = get_location_from_ip(ip_address)  # Fetch location from IP
+def send_login_attempt_notification(username, email, request):
+    ip_address = get_client_ip(request)  # Fetch real IP address
+    location = get_location_from_ip(ip_address)  # Fetch location from real IP
     device_id = generate_fingerprint(request)
     
     message_content = f"""
@@ -94,7 +108,6 @@ def home():
 def login():
     username = request.form['username']
     email = request.form['email']
-    ip_address = request.remote_addr
     fingerprint = generate_fingerprint(request)
 
     # Trigger OTP for unrecognized devices and send login notification
@@ -102,10 +115,10 @@ def login():
         otp = pyotp.random_base32()
         otp_storage[username] = {"otp": otp, "timestamp": time.time()}
         send_otp(email, otp)
-        send_login_attempt_notification(username, email, ip_address)
+        send_login_attempt_notification(username, email, request)
         return render_template('otp.html', email=email, username=username)
 
-    send_login_attempt_notification(username, email, ip_address)
+    send_login_attempt_notification(username, email, request)
     return "Login successful!"
 
 # Route to handle OTP verification
